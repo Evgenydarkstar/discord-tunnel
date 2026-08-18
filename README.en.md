@@ -76,17 +76,27 @@ The installer will:
 3. generate an access token;
 4. offer a safe allowlist of Discord domains;
 5. build and start the container;
-6. export the client CA certificate to `ca-cert.pem`.
+6. export the client CA certificate to
+   `<directory-containing-downloaded-deploy.sh>/.discord-tunnel/ca-cert.pem`.
 
 When running the separately downloaded script, service files are stored in a
 `.discord-tunnel` directory next to `deploy.sh`. Running `deploy.sh` again
 detects the installed service and offers to reconfigure it, remove it
 completely, or exit.
 
-After installation, save the `Server`, `Port`, and `Token` values and transfer
-`ca-cert.pem` to the client computer over a secure channel. The token grants
-access to the tunnel, so do not publish it in a repository, message, or
-screenshot.
+After installation, save the `Server`, `Port`, and `Token` values. If you ran the
+commands above from your home directory, retrieve the certificate from the exact
+path `$HOME/.discord-tunnel/ca-cert.pem`. To print its absolute path, run this
+from the same directory that contains the downloaded `deploy.sh`:
+
+```bash
+realpath .discord-tunnel/ca-cert.pem
+```
+
+Transfer this file to the client computer over a secure channel. Only the public
+`ca-cert.pem` is needed; never copy the private `ca-key.pem` from the server. The
+token grants access to the tunnel, so do not publish it in a repository, message,
+or screenshot.
 
 If the server is behind NAT, forward the selected UDP port. Allow the same port
 through the server firewall and the cloud provider's security group.
@@ -98,6 +108,11 @@ git clone https://github.com/Evgenydarkstar/discord-tunnel.git
 cd discord-tunnel
 sudo ./deploy.sh
 ```
+
+With this method, the certificate is stored in the repository root. If you ran
+`git clone` from your home directory, the exact path is
+`$HOME/discord-tunnel/ca-cert.pem`. From the repository root, run
+`realpath ca-cert.pem` to print its absolute path.
 
 The installer prints the relevant management commands when it finishes. For a
 standard installation, they are:
@@ -128,8 +143,10 @@ built Docker images, and the managed installation directory.
 4. Run `discord-tunnel.exe`.
 5. Enter the server IP address or hostname in `Server`, without `https://`.
 6. Enter the `Port` and `Token` shown by the server installer.
-7. Click `Browse` next to `CA Cert` and select the `ca-cert.pem` copied from the
-   server.
+7. Copy `$HOME/.discord-tunnel/ca-cert.pem` (quick installation) or
+   `$HOME/discord-tunnel/ca-cert.pem` (if the clone was created from the home
+   directory) from the server, then click `Browse` next to `CA Cert` and select
+   that file.
 8. Check the Discord path. It is normally detected automatically as
    `%LOCALAPPDATA%\Discord`.
 9. Leave `Skip TLS verify` disabled and click `Install`.
