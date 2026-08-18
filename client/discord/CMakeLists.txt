@@ -48,6 +48,7 @@ target_link_libraries(discord_tunnel_installer PRIVATE
     discord_runtime
     discord_shared
     bcrypt
+    comdlg32
     comctl32
     crypt32
     ntdll

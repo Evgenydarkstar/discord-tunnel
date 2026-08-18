@@ -78,6 +78,11 @@ The installer will:
 5. build and start the container;
 6. export the client CA certificate to `ca-cert.pem`.
 
+When running the separately downloaded script, service files are stored in a
+`.discord-tunnel` directory next to `deploy.sh`. Running `deploy.sh` again
+detects the installed service and offers to reconfigure it, remove it
+completely, or exit.
+
 After installation, save the `Server`, `Port`, and `Token` values and transfer
 `ca-cert.pem` to the client computer over a secure channel. The token grants
 access to the tunnel, so do not publish it in a repository, message, or
@@ -103,6 +108,9 @@ docker compose -f docker-compose.deploy.yml restart discord-tunnel
 sudo ./deploy.sh uninstall
 ```
 
+Uninstalling stops the container and removes service data, Docker volumes,
+built Docker images, and the managed installation directory.
+
 ## Windows client installation
 
 ### Requirements
@@ -120,7 +128,8 @@ sudo ./deploy.sh uninstall
 4. Run `discord-tunnel.exe`.
 5. Enter the server IP address or hostname in `Server`, without `https://`.
 6. Enter the `Port` and `Token` shown by the server installer.
-7. Select the `ca-cert.pem` copied from the server in `CA Cert`.
+7. Click `Browse` next to `CA Cert` and select the `ca-cert.pem` copied from the
+   server.
 8. Check the Discord path. It is normally detected automatically as
    `%LOCALAPPDATA%\Discord`.
 9. Leave `Skip TLS verify` disabled and click `Install`.

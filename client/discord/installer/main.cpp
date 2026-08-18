@@ -1,9 +1,11 @@
 #include <Windows.h>
+#include <commdlg.h>
 #include <commctrl.h>
 #include <shellapi.h>
 #include <shlobj.h>
 
 #include <filesystem>
+#include <iterator>
 #include <string>
 #include <vector>
 #include <cwctype>
@@ -22,10 +24,11 @@ constexpr int kIdToken = 1003;
 constexpr int kIdCaCert = 1004;
 constexpr int kIdDiscordPath = 1005;
 constexpr int kIdSkipVerify = 1006;
-constexpr int kIdBrowse = 1007;
+constexpr int kIdBrowseDiscordPath = 1007;
 constexpr int kIdInstall = 1008;
 constexpr int kIdUninstall = 1009;
 constexpr int kIdStatus = 1010;
+constexpr int kIdBrowseCaCert = 1011;
 
 struct UiState {
     HWND server = nullptr;
@@ -49,6 +52,19 @@ std::wstring window_text(HWND hwnd) {
 
 void set_status(const std::wstring& message) {
     SetWindowTextW(g_ui.status, message.c_str());
+}
+
+std::filesystem::path browse_for_ca_cert(HWND owner) {
+    wchar_t file_path[32768]{};
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = owner;
+    dialog.lpstrFilter = L"PEM certificates (*.pem)\0*.pem\0All files (*.*)\0*.*\0";
+    dialog.lpstrFile = file_path;
+    dialog.nMaxFile = static_cast<DWORD>(std::size(file_path));
+    dialog.lpstrTitle = L"Select CA certificate";
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    return GetOpenFileNameW(&dialog) == TRUE ? std::filesystem::path(file_path) : std::filesystem::path{};
 }
 
 std::filesystem::path browse_for_folder(HWND owner) {
@@ -295,7 +311,7 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
             g_ui.server = create_edit(hwnd, kIdServer, 140, 18, 340, 24);
             g_ui.port = create_edit(hwnd, kIdPort, 140, 58, 120, 24);
             g_ui.token = create_edit(hwnd, kIdToken, 140, 98, 340, 24);
-            g_ui.ca_cert = create_edit(hwnd, kIdCaCert, 140, 138, 340, 24);
+            g_ui.ca_cert = create_edit(hwnd, kIdCaCert, 140, 138, 280, 24);
             g_ui.discord_path = create_edit(hwnd, kIdDiscordPath, 140, 178, 280, 24);
             g_ui.skip_verify = CreateWindowW(
                 L"BUTTON",
@@ -314,11 +330,23 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
                 L"Browse",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP,
                 430,
+                138,
+                80,
+                24,
+                hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBrowseCaCert)),
+                nullptr,
+                nullptr);
+            CreateWindowW(
+                L"BUTTON",
+                L"Browse",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                430,
                 178,
                 80,
                 24,
                 hwnd,
-                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBrowse)),
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBrowseDiscordPath)),
                 nullptr,
                 nullptr);
             CreateWindowW(
@@ -368,7 +396,14 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
         }
         case WM_COMMAND: {
             switch (LOWORD(w_param)) {
-                case kIdBrowse: {
+                case kIdBrowseCaCert: {
+                    const auto selected = browse_for_ca_cert(hwnd);
+                    if (!selected.empty()) {
+                        SetWindowTextW(g_ui.ca_cert, selected.wstring().c_str());
+                    }
+                    return 0;
+                }
+                case kIdBrowseDiscordPath: {
                     const auto selected = browse_for_folder(hwnd);
                     if (!selected.empty()) {
                         SetWindowTextW(g_ui.discord_path, selected.wstring().c_str());

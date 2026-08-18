@@ -64,9 +64,26 @@ bootstrap_from_github() {
     # Fetch the project from GitHub into a local install directory and re-run
     # the deploy script from there. Called only when this script is run
     # standalone (copied outside the project).
-    step "Fetching the project from GitHub"
-    local install_dir="${DISCORD_TUNNEL_DIR:-$HOME/.discord-tunnel}"
+    local install_dir="${DISCORD_TUNNEL_DIR:-$SERVER_DIR/.discord-tunnel}"
     local tmp tar
+
+    if [ -d "$install_dir" ]; then
+        install_dir="$(cd "$install_dir" && pwd)"
+        if [ -f "$install_dir/.managed-install" ] && \
+           [ "$(cat "$install_dir/.managed-install")" = "$install_dir" ] && \
+           [ -f "$install_dir/deploy.sh" ] && [ -d "$install_dir/server" ]; then
+            exec bash "$install_dir/deploy.sh" "$@"
+        fi
+        if [ -n "$(find "$install_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            die "Installation directory already exists and is not managed by this script: $install_dir"
+        fi
+    elif [ -e "$install_dir" ]; then
+        die "Installation path exists and is not a directory: $install_dir"
+    fi
+
+    step "Fetching the project from GitHub"
+    mkdir -p "$install_dir"
+    install_dir="$(cd "$install_dir" && pwd)"
     tmp="$(mktemp -d)"
     tar="$tmp/$REPO_NAME.tar.gz"
     if command -v curl >/dev/null 2>&1; then
@@ -78,9 +95,9 @@ bootstrap_from_github() {
     else
         die "Neither curl nor wget is available; cannot fetch the project."
     fi
-    mkdir -p "$install_dir"
     tar -xzf "$tar" -C "$tmp"
     cp -a "$tmp/$REPO_NAME-$REPO_BRANCH/." "$install_dir/"
+    printf '%s\n' "$install_dir" > "$install_dir/.managed-install"
     rm -rf "$tmp"
     ok "Project downloaded to $install_dir"
     info "Re-running the deploy script from the downloaded project..."
@@ -312,6 +329,7 @@ write_compose() {
     cat > "$SERVER_DIR/docker-compose.deploy.yml" <<EOF
 services:
   discord-tunnel:
+    image: discord-tunnel-server:local
     build:
       context: ./server
       dockerfile: Dockerfile.discord
@@ -381,18 +399,18 @@ show_summary() {
 }
 
 compose_down() {
-    # compose_down <compose-file>  -> best-effort stop+remove of the stack and its locally-built image
+    # compose_down <compose-file> -> best-effort removal of the complete stack and its images
     local compose_file="$1"
     if ! command -v docker >/dev/null 2>&1; then
         return 1
     fi
     if docker compose version >/dev/null 2>&1; then
-        if docker compose -f "$compose_file" down --rmi local >/dev/null 2>&1; then
+        if docker compose -f "$compose_file" down --rmi all --volumes --remove-orphans >/dev/null 2>&1; then
             return 0
         fi
     fi
     if command -v docker-compose >/dev/null 2>&1; then
-        if docker-compose -f "$compose_file" down --rmi local >/dev/null 2>&1; then
+        if docker-compose -f "$compose_file" down --rmi all --volumes --remove-orphans >/dev/null 2>&1; then
             return 0
         fi
     fi
@@ -402,44 +420,76 @@ compose_down() {
 uninstall() {
     step "Uninstalling the Discord tunnel"
     local compose_file="$SERVER_DIR/docker-compose.deploy.yml"
+    local image_id=""
 
-    if [ -f "$compose_file" ]; then
-        if confirm "Stop and remove the tunnel container and its image?" "y"; then
-            if compose_down "$compose_file"; then
-                ok "Container and image removed."
-            else
-                warn "Could not stop the stack (no container running or Docker unavailable)."
-            fi
-        fi
-    else
-        info "No docker-compose.deploy.yml found; no container to stop."
+    if ! confirm "Remove the tunnel, its data, volumes and Docker images?" "n"; then
+        info "Uninstall cancelled."
+        return 0
     fi
 
-    # Best-effort cleanup of containers from a manual compose deployment.
+    if ! command -v docker >/dev/null 2>&1 && \
+       { [ -f "$compose_file" ] || [ -f "$SERVER_DIR/.managed-install" ]; }; then
+        die "Docker is unavailable. Deployment files were kept so removal can be retried."
+    fi
+    if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+        die "Cannot reach the Docker daemon. Deployment files were kept so removal can be retried."
+    fi
+    if command -v docker >/dev/null 2>&1; then
+        image_id="$(docker inspect --format '{{.Image}}' discord-tunnel 2>/dev/null || true)"
+    fi
+    if [ -f "$compose_file" ]; then
+        if compose_down "$compose_file"; then
+            ok "Container, volumes and Compose images removed."
+        else
+            warn "Could not remove the Compose stack; continuing with direct cleanup."
+        fi
+    fi
     if command -v docker >/dev/null 2>&1; then
         docker rm -f discord-tunnel >/dev/null 2>&1 || true
+        if [ -n "$image_id" ]; then
+            docker image rm -f "$image_id" >/dev/null 2>&1 || true
+        fi
+        docker image rm -f discord-tunnel-server:local >/dev/null 2>&1 || true
+        if docker inspect discord-tunnel >/dev/null 2>&1 || \
+           { [ -n "$image_id" ] && docker image inspect "$image_id" >/dev/null 2>&1; } || \
+           docker image inspect discord-tunnel-server:local >/dev/null 2>&1; then
+            die "Docker cleanup is incomplete. Deployment files were kept so removal can be retried."
+        fi
     fi
 
     step "Removing deployment files"
-    for f in docker-compose.deploy.yml .env ca-cert.pem; do
-        if [ -f "$SERVER_DIR/$f" ]; then
-            if confirm "Remove $f?" "y"; then
-                rm -f "$SERVER_DIR/$f"
-                ok "Removed $f"
-            fi
-        fi
-    done
-
-    if [ -d "$SERVER_DIR/data" ]; then
-        if confirm "Remove the server data directory ($SERVER_DIR/data)? This deletes certificates, configs and the database." "n"; then
-            rm -rf "$SERVER_DIR/data"
-            ok "Removed data directory."
-        fi
+    if [ -f "$SERVER_DIR/.managed-install" ] && \
+       [ "$(cat "$SERVER_DIR/.managed-install")" = "$SERVER_DIR" ] && \
+       [ ! -e "$SERVER_DIR/.git" ]; then
+        rm -rf "$SERVER_DIR"
+        ok "Removed managed installation directory $SERVER_DIR"
+    else
+        rm -rf "$SERVER_DIR/data"
+        rm -f "$SERVER_DIR/docker-compose.deploy.yml" "$SERVER_DIR/.env" \
+            "$SERVER_DIR/.env.bak" "$SERVER_DIR/ca-cert.pem"
+        ok "Removed generated deployment files."
     fi
 
     echo
     ok "Uninstall complete."
     info "Docker was left installed. Remove it with your distribution's package manager if desired."
+}
+
+existing_deployment_menu() {
+    step "Existing installation"
+    info "The Discord tunnel is already installed."
+    info "  1) Reconfigure and rebuild"
+    info "  2) Uninstall completely"
+    info "  3) Exit"
+
+    local choice=""
+    choice="$(prompt "Choose an action" "3")"
+    case "$choice" in
+        1) return 0 ;;
+        2) uninstall; exit 0 ;;
+        3) exit 0 ;;
+        *) die "Invalid choice: $choice" ;;
+    esac
 }
 
 main() {
@@ -455,6 +505,9 @@ main() {
             ;;
         *)
             require_root
+            if [ -f "$SERVER_DIR/.managed-install" ] || [ -f "$SERVER_DIR/docker-compose.deploy.yml" ]; then
+                existing_deployment_menu
+            fi
             detect_distro
             check_docker
             collect_settings
