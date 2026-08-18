@@ -31,6 +31,11 @@ constexpr int kIdStatus = 1010;
 constexpr int kIdBrowseCaCert = 1011;
 
 struct UiState {
+    HWND title = nullptr;
+    HWND subtitle = nullptr;
+    HWND connection_heading = nullptr;
+    HWND client_heading = nullptr;
+    HWND helper_text = nullptr;
     HWND server = nullptr;
     HWND port = nullptr;
     HWND token = nullptr;
@@ -42,6 +47,30 @@ struct UiState {
 
 UiState g_ui;
 
+constexpr COLORREF kBackgroundColor = RGB(244, 247, 251);
+constexpr COLORREF kCardColor = RGB(255, 255, 255);
+constexpr COLORREF kEditColor = RGB(248, 250, 252);
+constexpr COLORREF kHeaderColor = RGB(15, 23, 42);
+constexpr COLORREF kTextColor = RGB(15, 23, 42);
+constexpr COLORREF kMutedColor = RGB(100, 116, 139);
+constexpr COLORREF kBorderColor = RGB(226, 232, 240);
+constexpr COLORREF kAccentColor = RGB(37, 99, 235);
+constexpr COLORREF kAccentPressedColor = RGB(29, 78, 216);
+constexpr COLORREF kDangerColor = RGB(185, 28, 28);
+constexpr COLORREF kDangerPressedColor = RGB(153, 27, 27);
+constexpr COLORREF kStatusColor = RGB(239, 246, 255);
+
+HBRUSH g_background_brush = nullptr;
+HBRUSH g_card_brush = nullptr;
+HBRUSH g_edit_brush = nullptr;
+HBRUSH g_status_brush = nullptr;
+HBRUSH g_border_brush = nullptr;
+HFONT g_title_font = nullptr;
+HFONT g_subtitle_font = nullptr;
+HFONT g_heading_font = nullptr;
+HFONT g_body_font = nullptr;
+HFONT g_button_font = nullptr;
+
 std::wstring window_text(HWND hwnd) {
     const int len = GetWindowTextLengthW(hwnd);
     std::wstring text(len + 1, L'\0');
@@ -51,7 +80,11 @@ std::wstring window_text(HWND hwnd) {
 }
 
 void set_status(const std::wstring& message) {
-    SetWindowTextW(g_ui.status, message.c_str());
+    const auto line_break = message.find(L"\r\n");
+    const std::wstring summary = line_break == std::wstring::npos
+        ? message
+        : message.substr(0, line_break) + L" Details are shown in the dialog.";
+    SetWindowTextW(g_ui.status, summary.c_str());
 }
 
 std::filesystem::path browse_for_ca_cert(HWND owner) {
@@ -211,16 +244,87 @@ bool uninstall_files(const std::filesystem::path& root, std::wstring* message) {
     return true;
 }
 
-void create_label(HWND parent, const wchar_t* text, int x, int y, int w, int h) {
-    CreateWindowW(L"STATIC", text, WS_CHILD | WS_VISIBLE, x, y, w, h, parent, nullptr, nullptr, nullptr);
+HFONT create_font(int points, int weight) {
+    HDC screen = GetDC(nullptr);
+    const int height = -MulDiv(points, GetDeviceCaps(screen, LOGPIXELSY), 72);
+    ReleaseDC(nullptr, screen);
+    return CreateFontW(
+        height,
+        0,
+        0,
+        0,
+        weight,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI");
+}
+
+void initialize_theme() {
+    g_background_brush = CreateSolidBrush(kBackgroundColor);
+    g_card_brush = CreateSolidBrush(kCardColor);
+    g_edit_brush = CreateSolidBrush(kEditColor);
+    g_status_brush = CreateSolidBrush(kStatusColor);
+    g_border_brush = CreateSolidBrush(kBorderColor);
+    g_title_font = create_font(22, FW_SEMIBOLD);
+    g_subtitle_font = create_font(10, FW_NORMAL);
+    g_heading_font = create_font(11, FW_SEMIBOLD);
+    g_body_font = create_font(10, FW_NORMAL);
+    g_button_font = create_font(10, FW_SEMIBOLD);
+}
+
+void cleanup_theme() {
+    DeleteObject(g_background_brush);
+    DeleteObject(g_card_brush);
+    DeleteObject(g_edit_brush);
+    DeleteObject(g_status_brush);
+    DeleteObject(g_border_brush);
+    DeleteObject(g_title_font);
+    DeleteObject(g_subtitle_font);
+    DeleteObject(g_heading_font);
+    DeleteObject(g_body_font);
+    DeleteObject(g_button_font);
+}
+
+void set_control_font(HWND control, HFONT font) {
+    SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+}
+
+HWND create_label(
+    HWND parent,
+    const wchar_t* text,
+    int x,
+    int y,
+    int w,
+    int h,
+    HFONT font = nullptr) {
+    HWND label = CreateWindowW(
+        L"STATIC",
+        text,
+        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
+        x,
+        y,
+        w,
+        h,
+        parent,
+        nullptr,
+        nullptr,
+        nullptr);
+    set_control_font(label, font == nullptr ? g_body_font : font);
+    return label;
 }
 
 HWND create_edit(HWND parent, int id, int x, int y, int w, int h, DWORD extra_style = 0) {
-    return CreateWindowExW(
-        WS_EX_CLIENTEDGE,
+    HWND edit = CreateWindowExW(
+        0,
         L"EDIT",
         L"",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | extra_style,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL | extra_style,
         x,
         y,
         w,
@@ -229,6 +333,109 @@ HWND create_edit(HWND parent, int id, int x, int y, int w, int h, DWORD extra_st
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
         nullptr,
         nullptr);
+    set_control_font(edit, g_body_font);
+    SendMessageW(edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(9, 9));
+    return edit;
+}
+
+HWND create_button(HWND parent, const wchar_t* text, int id, int x, int y, int w, int h) {
+    HWND button = CreateWindowW(
+        L"BUTTON",
+        text,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        x,
+        y,
+        w,
+        h,
+        parent,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+        nullptr,
+        nullptr);
+    set_control_font(button, g_button_font);
+    return button;
+}
+
+void paint_rounded_rect(HDC dc, const RECT& rect, int radius, HBRUSH fill, HBRUSH border) {
+    HRGN region = CreateRoundRectRgn(rect.left, rect.top, rect.right + 1, rect.bottom + 1, radius, radius);
+    FillRgn(dc, region, fill);
+    if (border != nullptr) {
+        FrameRgn(dc, region, border, 1, 1);
+    }
+    DeleteObject(region);
+}
+
+void paint_window(HWND hwnd) {
+    PAINTSTRUCT paint{};
+    HDC dc = BeginPaint(hwnd, &paint);
+    RECT client{};
+    GetClientRect(hwnd, &client);
+    FillRect(dc, &client, g_background_brush);
+
+    RECT header{0, 0, client.right, 104};
+    HBRUSH header_brush = CreateSolidBrush(kHeaderColor);
+    FillRect(dc, &header, header_brush);
+    DeleteObject(header_brush);
+
+    HBRUSH accent_brush = CreateSolidBrush(kAccentColor);
+    RECT mark{28, 28, 42, 68};
+    paint_rounded_rect(dc, mark, 8, accent_brush, nullptr);
+    DeleteObject(accent_brush);
+
+    paint_rounded_rect(dc, RECT{28, 128, 732, 320}, 16, g_card_brush, g_border_brush);
+    paint_rounded_rect(dc, RECT{28, 340, 732, 536}, 16, g_card_brush, g_border_brush);
+    paint_rounded_rect(dc, RECT{28, 612, 732, 680}, 14, g_status_brush, nullptr);
+
+    HBRUSH status_dot = CreateSolidBrush(kAccentColor);
+    HGDIOBJ old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
+    HGDIOBJ old_brush = SelectObject(dc, status_dot);
+    Ellipse(dc, 46, 638, 56, 648);
+    SelectObject(dc, old_brush);
+    SelectObject(dc, old_pen);
+    DeleteObject(status_dot);
+    EndPaint(hwnd, &paint);
+}
+
+void draw_button(const DRAWITEMSTRUCT& item) {
+    wchar_t text[128]{};
+    GetWindowTextW(item.hwndItem, text, static_cast<int>(std::size(text)));
+
+    const bool action_button = item.CtlID == kIdInstall || item.CtlID == kIdUninstall;
+    FillRect(item.hDC, &item.rcItem, action_button ? g_background_brush : g_card_brush);
+
+    const bool pressed = (item.itemState & ODS_SELECTED) != 0;
+    COLORREF fill = kCardColor;
+    COLORREF foreground = kTextColor;
+    COLORREF border = kBorderColor;
+    if (item.CtlID == kIdInstall) {
+        fill = pressed ? kAccentPressedColor : kAccentColor;
+        foreground = RGB(255, 255, 255);
+        border = fill;
+    } else if (item.CtlID == kIdUninstall) {
+        fill = pressed ? kDangerPressedColor : kCardColor;
+        foreground = pressed ? RGB(255, 255, 255) : kDangerColor;
+        border = pressed ? kDangerPressedColor : RGB(254, 202, 202);
+    } else if (pressed) {
+        fill = RGB(241, 245, 249);
+    }
+
+    HBRUSH fill_brush = CreateSolidBrush(fill);
+    HBRUSH border_brush = CreateSolidBrush(border);
+    paint_rounded_rect(item.hDC, item.rcItem, 10, fill_brush, border_brush);
+    DeleteObject(fill_brush);
+    DeleteObject(border_brush);
+
+    SetBkMode(item.hDC, TRANSPARENT);
+    SetTextColor(item.hDC, foreground);
+    HGDIOBJ old_font = SelectObject(item.hDC, g_button_font);
+    RECT text_rect = item.rcItem;
+    DrawTextW(item.hDC, text, -1, &text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(item.hDC, old_font);
+
+    if ((item.itemState & ODS_FOCUS) != 0) {
+        RECT focus = item.rcItem;
+        InflateRect(&focus, -4, -4);
+        DrawFocusRect(item.hDC, &focus);
+    }
 }
 
 int start_embedded_runtime(const std::filesystem::path& app_dir) {
@@ -302,89 +509,82 @@ int launch_runtime_mode(int argc, wchar_t** argv) {
 LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param) {
     switch (message) {
         case WM_CREATE: {
-            create_label(hwnd, L"Server", 20, 20, 120, 20);
-            create_label(hwnd, L"Port", 20, 60, 120, 20);
-            create_label(hwnd, L"Token", 20, 100, 120, 20);
-            create_label(hwnd, L"CA Cert", 20, 140, 120, 20);
-            create_label(hwnd, L"Discord Path", 20, 180, 120, 20);
+            g_ui.title = create_label(hwnd, L"Discord Tunnel", 58, 22, 500, 36, g_title_font);
+            g_ui.subtitle = create_label(
+                hwnd,
+                L"Private, low-latency connectivity for Discord voice and media",
+                58,
+                62,
+                620,
+                22,
+                g_subtitle_font);
+            g_ui.connection_heading = create_label(hwnd, L"Connection", 48, 148, 240, 24, g_heading_font);
+            g_ui.client_heading = create_label(hwnd, L"Client setup", 48, 360, 240, 24, g_heading_font);
 
-            g_ui.server = create_edit(hwnd, kIdServer, 140, 18, 340, 24);
-            g_ui.port = create_edit(hwnd, kIdPort, 140, 58, 120, 24);
-            g_ui.token = create_edit(hwnd, kIdToken, 140, 98, 340, 24);
-            g_ui.ca_cert = create_edit(hwnd, kIdCaCert, 140, 138, 280, 24);
-            g_ui.discord_path = create_edit(hwnd, kIdDiscordPath, 140, 178, 280, 24);
+            create_label(hwnd, L"Server address", 48, 182, 300, 20);
+            create_label(hwnd, L"Port", 568, 182, 144, 20);
+            create_label(hwnd, L"Access token", 48, 250, 300, 20);
+            create_label(hwnd, L"Discord installation", 48, 398, 300, 20);
+            create_label(hwnd, L"CA certificate (optional)", 48, 466, 300, 20);
+
+            g_ui.server = create_edit(hwnd, kIdServer, 48, 204, 500, 32);
+            g_ui.port = create_edit(hwnd, kIdPort, 568, 204, 144, 32, ES_NUMBER);
+            g_ui.token = create_edit(hwnd, kIdToken, 48, 272, 664, 32);
+            g_ui.discord_path = create_edit(hwnd, kIdDiscordPath, 48, 420, 548, 32);
+            g_ui.ca_cert = create_edit(hwnd, kIdCaCert, 48, 488, 548, 32);
+
+            SendMessageW(g_ui.server, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"vpn.example.com"));
+            SendMessageW(g_ui.token, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Paste the token from your server"));
+            SendMessageW(
+                g_ui.discord_path,
+                EM_SETCUEBANNER,
+                TRUE,
+                reinterpret_cast<LPARAM>(L"Select the Discord installation folder"));
+            SendMessageW(
+                g_ui.ca_cert,
+                EM_SETCUEBANNER,
+                TRUE,
+                reinterpret_cast<LPARAM>(L"Use the certificate exported by deploy.sh"));
+
             g_ui.skip_verify = CreateWindowW(
                 L"BUTTON",
-                L"Skip TLS verify",
+                L"Skip TLS certificate verification",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                140,
-                214,
-                180,
-                24,
+                472,
+                356,
+                240,
+                26,
                 hwnd,
                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSkipVerify)),
                 nullptr,
                 nullptr);
-            CreateWindowW(
-                L"BUTTON",
-                L"Browse",
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                430,
-                138,
-                80,
-                24,
+            set_control_font(g_ui.skip_verify, g_body_font);
+
+            create_button(hwnd, L"Browse", kIdBrowseDiscordPath, 610, 419, 102, 34);
+            create_button(hwnd, L"Browse", kIdBrowseCaCert, 610, 487, 102, 34);
+            g_ui.helper_text = create_label(
                 hwnd,
-                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBrowseCaCert)),
-                nullptr,
-                nullptr);
-            CreateWindowW(
-                L"BUTTON",
-                L"Browse",
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                430,
-                178,
-                80,
-                24,
-                hwnd,
-                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBrowseDiscordPath)),
-                nullptr,
-                nullptr);
-            CreateWindowW(
-                L"BUTTON",
-                L"Install",
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                140,
-                255,
-                120,
-                32,
-                hwnd,
-                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdInstall)),
-                nullptr,
-                nullptr);
-            CreateWindowW(
-                L"BUTTON",
-                L"Uninstall",
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                270,
-                255,
-                120,
-                32,
-                hwnd,
-                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdUninstall)),
-                nullptr,
-                nullptr);
+                L"Settings are applied to every detected Discord app version.",
+                48,
+                563,
+                360,
+                28,
+                g_subtitle_font);
+            create_button(hwnd, L"Uninstall", kIdUninstall, 424, 552, 136, 40);
+            create_button(hwnd, L"Install client", kIdInstall, 576, 552, 136, 40);
             g_ui.status = CreateWindowW(
                 L"STATIC",
-                L"Ready",
-                WS_CHILD | WS_VISIBLE,
-                20,
-                305,
-                490,
-                60,
+                L"Ready. Enter your connection details to continue.",
+                WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
+                68,
+                625,
+                640,
+                42,
                 hwnd,
                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStatus)),
                 nullptr,
                 nullptr);
+            set_control_font(g_ui.status, g_body_font);
 
             SetWindowTextW(g_ui.port, L"443");
             const auto root = default_discord_root();
@@ -393,6 +593,51 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
                 load_existing_config_into_ui(root);
             }
             return 0;
+        }
+        case WM_PAINT:
+            paint_window(hwnd);
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_DRAWITEM: {
+            const auto* item = reinterpret_cast<const DRAWITEMSTRUCT*>(l_param);
+            if (item != nullptr && item->CtlType == ODT_BUTTON) {
+                draw_button(*item);
+                return TRUE;
+            }
+            break;
+        }
+        case WM_CTLCOLORSTATIC: {
+            HDC dc = reinterpret_cast<HDC>(w_param);
+            HWND control = reinterpret_cast<HWND>(l_param);
+            SetBkMode(dc, TRANSPARENT);
+            if (control == g_ui.title) {
+                SetTextColor(dc, RGB(255, 255, 255));
+            } else if (control == g_ui.subtitle) {
+                SetTextColor(dc, RGB(203, 213, 225));
+            } else if (control == g_ui.connection_heading || control == g_ui.client_heading) {
+                SetTextColor(dc, kTextColor);
+            } else if (control == g_ui.status) {
+                SetTextColor(dc, RGB(30, 64, 175));
+                SetBkColor(dc, kStatusColor);
+                SetBkMode(dc, OPAQUE);
+                return reinterpret_cast<LRESULT>(g_status_brush);
+            } else {
+                SetTextColor(dc, kMutedColor);
+            }
+            return reinterpret_cast<LRESULT>(GetStockObject(HOLLOW_BRUSH));
+        }
+        case WM_CTLCOLOREDIT: {
+            HDC dc = reinterpret_cast<HDC>(w_param);
+            SetTextColor(dc, kTextColor);
+            SetBkColor(dc, kEditColor);
+            return reinterpret_cast<LRESULT>(g_edit_brush);
+        }
+        case WM_CTLCOLORBTN: {
+            HDC dc = reinterpret_cast<HDC>(w_param);
+            SetTextColor(dc, kMutedColor);
+            SetBkColor(dc, kCardColor);
+            return reinterpret_cast<LRESULT>(g_card_brush);
         }
         case WM_COMMAND: {
             switch (LOWORD(w_param)) {
@@ -467,6 +712,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
 
     INITCOMMONCONTROLSEX controls{sizeof(INITCOMMONCONTROLSEX), ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&controls);
+    initialize_theme();
 
     const wchar_t kClassName[] = L"ManyserverDiscordInstaller";
     WNDCLASSW wc{};
@@ -474,24 +720,35 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
     wc.hInstance = instance;
     wc.lpszClassName = kClassName;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-    RegisterClassW(&wc);
+    wc.hbrBackground = nullptr;
+    if (RegisterClassW(&wc) == 0) {
+        cleanup_theme();
+        LocalFree(argv);
+        CoUninitialize();
+        return 1;
+    }
+
+    RECT window_rect{0, 0, 760, 700};
+    const DWORD window_style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    AdjustWindowRect(&window_rect, window_style, FALSE);
 
     HWND hwnd = CreateWindowExW(
         0,
         kClassName,
         L"Manyserver Discord Client",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        window_style,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        550,
-        430,
+        window_rect.right - window_rect.left,
+        window_rect.bottom - window_rect.top,
         nullptr,
         nullptr,
         instance,
         nullptr);
     if (hwnd == nullptr) {
+        cleanup_theme();
         LocalFree(argv);
+        CoUninitialize();
         return 1;
     }
 
@@ -505,6 +762,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
     }
 
     LocalFree(argv);
+    cleanup_theme();
     CoUninitialize();
     return static_cast<int>(msg.wParam);
 }

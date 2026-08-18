@@ -352,6 +352,7 @@ EOF
 start_server() {
     step "Building and starting the server"
     $docker_compose -f "$SERVER_DIR/docker-compose.deploy.yml" up -d --build
+    docker image inspect --format '{{.Id}}' discord-tunnel-server:local > "$SERVER_DIR/.managed-image-id"
     ok "Server is starting."
 }
 
@@ -399,18 +400,18 @@ show_summary() {
 }
 
 compose_down() {
-    # compose_down <compose-file> -> best-effort removal of the complete stack and its images
+    # Images are removed explicitly by tag so unrelated Compose images are never touched.
     local compose_file="$1"
     if ! command -v docker >/dev/null 2>&1; then
         return 1
     fi
     if docker compose version >/dev/null 2>&1; then
-        if docker compose -f "$compose_file" down --rmi all --volumes --remove-orphans >/dev/null 2>&1; then
+        if docker compose -f "$compose_file" down --volumes --remove-orphans >/dev/null 2>&1; then
             return 0
         fi
     fi
     if command -v docker-compose >/dev/null 2>&1; then
-        if docker-compose -f "$compose_file" down --rmi all --volumes --remove-orphans >/dev/null 2>&1; then
+        if docker-compose -f "$compose_file" down --volumes --remove-orphans >/dev/null 2>&1; then
             return 0
         fi
     fi
@@ -420,7 +421,8 @@ compose_down() {
 uninstall() {
     step "Uninstalling the Discord tunnel"
     local compose_file="$SERVER_DIR/docker-compose.deploy.yml"
-    local image_id=""
+    local managed_image_id=""
+    local current_image_id=""
 
     if ! confirm "Remove the tunnel, its data, volumes and Docker images?" "n"; then
         info "Uninstall cancelled."
@@ -434,25 +436,31 @@ uninstall() {
     if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
         die "Cannot reach the Docker daemon. Deployment files were kept so removal can be retried."
     fi
-    if command -v docker >/dev/null 2>&1; then
-        image_id="$(docker inspect --format '{{.Image}}' discord-tunnel 2>/dev/null || true)"
-    fi
     if [ -f "$compose_file" ]; then
         if compose_down "$compose_file"; then
-            ok "Container, volumes and Compose images removed."
+            ok "Container and volumes removed."
         else
             warn "Could not remove the Compose stack; continuing with direct cleanup."
         fi
     fi
     if command -v docker >/dev/null 2>&1; then
         docker rm -f discord-tunnel >/dev/null 2>&1 || true
-        if [ -n "$image_id" ]; then
-            docker image rm -f "$image_id" >/dev/null 2>&1 || true
+        if [ -f "$SERVER_DIR/.managed-image-id" ]; then
+            managed_image_id="$(cat "$SERVER_DIR/.managed-image-id")"
+            if ! printf '%s\n' "$managed_image_id" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+                warn "Kept Docker images because the recorded image ID is invalid."
+                managed_image_id=""
+            fi
+            current_image_id="$(docker image inspect --format '{{.Id}}' discord-tunnel-server:local 2>/dev/null || true)"
         fi
-        docker image rm -f discord-tunnel-server:local >/dev/null 2>&1 || true
+        if [ -n "$managed_image_id" ] && [ "$current_image_id" = "$managed_image_id" ]; then
+            docker image rm -f "$managed_image_id" >/dev/null 2>&1 || true
+        elif [ -n "$current_image_id" ]; then
+            warn "Kept discord-tunnel-server:local because it is not the image built by this installation."
+        fi
         if docker inspect discord-tunnel >/dev/null 2>&1 || \
-           { [ -n "$image_id" ] && docker image inspect "$image_id" >/dev/null 2>&1; } || \
-           docker image inspect discord-tunnel-server:local >/dev/null 2>&1; then
+           { [ -n "$managed_image_id" ] && [ "$current_image_id" = "$managed_image_id" ] && \
+             docker image inspect "$managed_image_id" >/dev/null 2>&1; }; then
             die "Docker cleanup is incomplete. Deployment files were kept so removal can be retried."
         fi
     fi
@@ -466,7 +474,7 @@ uninstall() {
     else
         rm -rf "$SERVER_DIR/data"
         rm -f "$SERVER_DIR/docker-compose.deploy.yml" "$SERVER_DIR/.env" \
-            "$SERVER_DIR/.env.bak" "$SERVER_DIR/ca-cert.pem"
+            "$SERVER_DIR/.env.bak" "$SERVER_DIR/ca-cert.pem" "$SERVER_DIR/.managed-image-id"
         ok "Removed generated deployment files."
     fi
 
