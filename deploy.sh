@@ -313,13 +313,10 @@ write_env() {
         fi
     fi
     cat > "$env_file" <<EOF
-VPN_TYPE=discord
 VPN_PORT=$server_port
 PUBLIC_IP=$server_ip
 DISCORD_HTTP3_TOKEN=$server_token
 DISCORD_HTTP3_ALLOWED_HOSTS=$server_allowed_hosts
-WORKER_ID=local-worker
-WORKER_TOKEN=$server_token
 EOF
     ok ".env written."
 }

@@ -9,29 +9,18 @@ WORKDIR /app
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bash \
-    ca-certificates \
-    curl \
-    openssl && \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
 COPY app/__init__.py /app/app/__init__.py
-COPY app/bootstrap.py /app/app/bootstrap.py
 COPY app/certs.py /app/app/certs.py
 COPY app/config.py /app/app/config.py
-COPY app/db.py /app/app/db.py
 COPY app/discord_http3.py /app/app/discord_http3.py
 COPY app/discord_protocol.py /app/app/discord_protocol.py
-COPY app/schemas.py /app/app/schemas.py
-COPY app/service.py /app/app/service.py
-COPY app/worker_api.py /app/app/worker_api.py
-COPY app/worker_client.py /app/app/worker_client.py
 COPY scripts/start-discord-http3.sh /app/scripts/start-discord-http3.sh
-COPY scripts/start-worker-api.sh /app/scripts/start-worker-api.sh
-COPY requirements.txt /app/requirements.txt
-COPY Dockerfile.discord /app/Dockerfile.discord
 
 RUN chmod +x /app/scripts/*.sh && \
     mkdir -p /data /var/log

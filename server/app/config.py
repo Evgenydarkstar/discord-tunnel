@@ -52,44 +52,11 @@ def _default_data_dir(app_dir: Path) -> Path:
 @dataclass(frozen=True)
 class Settings:
     public_ip: str
-    vpn_port: int
-    vpn_type: str
-    worker_id: str
-    worker_token: str
-    worker_api_port: int
-    worker_public_url: str
-    worker_tls_cert_path: str
-    worker_tls_key_path: str
-    central_api_url: str
-    central_api_ca_cert_path: str
-    central_mode: str
-    app_version: str
     data_dir: Path = Path("/data")
-    app_dir: Path = Path("/app")
-
-    @property
-    def db_path(self) -> Path:
-        return self.data_dir / "db" / "control.db"
 
     @property
     def certs_dir(self) -> Path:
         return self.data_dir / "certs"
-
-    @property
-    def api_ca_cert_path(self) -> Path:
-        return self.data_dir / "control-api" / "ca.crt"
-
-    @property
-    def api_ca_key_path(self) -> Path:
-        return self.data_dir / "control-api" / "ca.key"
-
-    @property
-    def control_api_cert_path(self) -> Path:
-        return self.data_dir / "control-api" / "tls.crt"
-
-    @property
-    def control_api_key_path(self) -> Path:
-        return self.data_dir / "control-api" / "tls.key"
 
 
 def load_settings() -> Settings:
@@ -100,25 +67,7 @@ def load_settings() -> Settings:
     if not public_ip:
         raise ValueError("PUBLIC_IP is required")
 
-    worker_api_port = int(os.environ.get("WORKER_API_PORT", "8080"))
-    worker_public_url = os.environ.get("WORKER_PUBLIC_URL", "").strip()
-    if not worker_public_url:
-        worker_public_url = f"http://127.0.0.1:{worker_api_port}"
-
     return Settings(
         public_ip=public_ip,
-        vpn_port=int(os.environ.get("VPN_PORT", "443")),
-        vpn_type=os.environ.get("VPN_TYPE", "discord").strip().lower(),
-        worker_id=os.environ.get("WORKER_ID", "").strip(),
-        worker_token=os.environ.get("WORKER_TOKEN", "").strip(),
-        worker_api_port=worker_api_port,
-        worker_public_url=worker_public_url,
-        worker_tls_cert_path=os.environ.get("WORKER_TLS_CERT_PATH", "").strip(),
-        worker_tls_key_path=os.environ.get("WORKER_TLS_KEY_PATH", "").strip(),
-        central_api_url=os.environ.get("CENTRAL_API_URL", "").strip(),
-        central_api_ca_cert_path=os.environ.get("CENTRAL_API_CA_CERT_PATH", "").strip(),
-        central_mode=os.environ.get("CENTRAL_MODE", "single").strip().lower(),
-        app_version=os.environ.get("APP_VERSION", "dev").strip(),
         data_dir=data_dir,
-        app_dir=app_dir,
     )
