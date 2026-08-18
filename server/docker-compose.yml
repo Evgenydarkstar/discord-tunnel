@@ -1,7 +1,7 @@
 services:
   vpn-control:
     build: .
-    container_name: openconnect-control
+    container_name: discord-tunnel-control
     restart: unless-stopped
     privileged: true
     cap_add:

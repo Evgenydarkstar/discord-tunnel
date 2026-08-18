@@ -416,7 +416,7 @@ uninstall() {
 
     # Best-effort cleanup of containers from a manual compose deployment.
     if command -v docker >/dev/null 2>&1; then
-        docker rm -f discord-http3-runtime discord-http3 openconnect-control >/dev/null 2>&1 || true
+        docker rm -f discord-http3-runtime discord-http3 >/dev/null 2>&1 || true
     fi
 
     step "Removing deployment files"
