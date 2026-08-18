@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <commdlg.h>
 #include <commctrl.h>
+#include <dwmapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
 
@@ -47,18 +48,18 @@ struct UiState {
 
 UiState g_ui;
 
-constexpr COLORREF kBackgroundColor = RGB(244, 247, 251);
-constexpr COLORREF kCardColor = RGB(255, 255, 255);
-constexpr COLORREF kEditColor = RGB(248, 250, 252);
-constexpr COLORREF kHeaderColor = RGB(15, 23, 42);
-constexpr COLORREF kTextColor = RGB(15, 23, 42);
-constexpr COLORREF kMutedColor = RGB(100, 116, 139);
-constexpr COLORREF kBorderColor = RGB(226, 232, 240);
-constexpr COLORREF kAccentColor = RGB(37, 99, 235);
-constexpr COLORREF kAccentPressedColor = RGB(29, 78, 216);
-constexpr COLORREF kDangerColor = RGB(185, 28, 28);
-constexpr COLORREF kDangerPressedColor = RGB(153, 27, 27);
-constexpr COLORREF kStatusColor = RGB(239, 246, 255);
+constexpr COLORREF kBackgroundColor = RGB(11, 17, 32);
+constexpr COLORREF kCardColor = RGB(17, 24, 39);
+constexpr COLORREF kEditColor = RGB(15, 23, 42);
+constexpr COLORREF kHeaderColor = RGB(7, 11, 20);
+constexpr COLORREF kTextColor = RGB(226, 232, 240);
+constexpr COLORREF kMutedColor = RGB(148, 163, 184);
+constexpr COLORREF kBorderColor = RGB(51, 65, 85);
+constexpr COLORREF kAccentColor = RGB(88, 101, 242);
+constexpr COLORREF kAccentPressedColor = RGB(71, 82, 196);
+constexpr COLORREF kDangerColor = RGB(248, 113, 113);
+constexpr COLORREF kDangerPressedColor = RGB(185, 28, 28);
+constexpr COLORREF kStatusColor = RGB(17, 29, 53);
 
 HBRUSH g_background_brush = nullptr;
 HBRUSH g_card_brush = nullptr;
@@ -168,16 +169,20 @@ bool validate_config(const AppConfig& config, std::wstring* error) {
         *error = L"Token is required.";
         return false;
     }
+    if (config.ca_cert_path.empty()) {
+        *error = L"CA certificate is required.";
+        return false;
+    }
+    if (!std::filesystem::is_regular_file(config.ca_cert_path)) {
+        *error = L"CA certificate path does not exist.";
+        return false;
+    }
     if (config.discord_root.empty()) {
         *error = L"Discord Path is required.";
         return false;
     }
     if (!std::filesystem::is_directory(config.discord_root)) {
         *error = L"Discord Path does not exist.";
-        return false;
-    }
-    if (!config.ca_cert_path.empty() && !std::filesystem::is_regular_file(config.ca_cert_path)) {
-        *error = L"CA Cert path does not exist.";
         return false;
     }
     return true;
@@ -289,6 +294,15 @@ void cleanup_theme() {
     DeleteObject(g_heading_font);
     DeleteObject(g_body_font);
     DeleteObject(g_button_font);
+}
+
+void enable_dark_title_bar(HWND hwnd) {
+    constexpr DWORD kUseImmersiveDarkMode = 20;
+    BOOL enabled = TRUE;
+    if (FAILED(DwmSetWindowAttribute(hwnd, kUseImmersiveDarkMode, &enabled, sizeof(enabled)))) {
+        constexpr DWORD kUseImmersiveDarkModeBefore20H1 = 19;
+        DwmSetWindowAttribute(hwnd, kUseImmersiveDarkModeBefore20H1, &enabled, sizeof(enabled));
+    }
 }
 
 void set_control_font(HWND control, HFONT font) {
@@ -413,9 +427,9 @@ void draw_button(const DRAWITEMSTRUCT& item) {
     } else if (item.CtlID == kIdUninstall) {
         fill = pressed ? kDangerPressedColor : kCardColor;
         foreground = pressed ? RGB(255, 255, 255) : kDangerColor;
-        border = pressed ? kDangerPressedColor : RGB(254, 202, 202);
+        border = pressed ? kDangerPressedColor : RGB(127, 29, 29);
     } else if (pressed) {
-        fill = RGB(241, 245, 249);
+        fill = RGB(30, 41, 59);
     }
 
     HBRUSH fill_brush = CreateSolidBrush(fill);
@@ -525,7 +539,7 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
             create_label(hwnd, L"Port", 568, 182, 144, 20);
             create_label(hwnd, L"Access token", 48, 250, 300, 20);
             create_label(hwnd, L"Discord installation", 48, 398, 300, 20);
-            create_label(hwnd, L"CA certificate (optional)", 48, 466, 300, 20);
+            create_label(hwnd, L"CA certificate", 48, 466, 300, 20);
 
             g_ui.server = create_edit(hwnd, kIdServer, 48, 204, 500, 32);
             g_ui.port = create_edit(hwnd, kIdPort, 568, 204, 144, 32, ES_NUMBER);
@@ -614,11 +628,11 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_p
             if (control == g_ui.title) {
                 SetTextColor(dc, RGB(255, 255, 255));
             } else if (control == g_ui.subtitle) {
-                SetTextColor(dc, RGB(203, 213, 225));
+                SetTextColor(dc, kMutedColor);
             } else if (control == g_ui.connection_heading || control == g_ui.client_heading) {
                 SetTextColor(dc, kTextColor);
             } else if (control == g_ui.status) {
-                SetTextColor(dc, RGB(30, 64, 175));
+                SetTextColor(dc, RGB(147, 197, 253));
                 SetBkColor(dc, kStatusColor);
                 SetBkMode(dc, OPAQUE);
                 return reinterpret_cast<LRESULT>(g_status_brush);
@@ -752,6 +766,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
         return 1;
     }
 
+    enable_dark_title_bar(hwnd);
     ShowWindow(hwnd, show_command);
     UpdateWindow(hwnd);
 

@@ -139,7 +139,7 @@ std::optional<AppConfig> load_config(const std::filesystem::path& path) {
         config.skip_tls_verify = parse_bool(insecure_value);
     }
 
-    if (config.server.empty() || config.token.empty()) {
+    if (config.server.empty() || config.token.empty() || config.ca_cert_path.empty()) {
         return std::nullopt;
     }
     return config;

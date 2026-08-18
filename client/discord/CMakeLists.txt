@@ -51,6 +51,7 @@ target_link_libraries(discord_tunnel_installer PRIVATE
     comdlg32
     comctl32
     crypt32
+    dwmapi
     ntdll
     secur32
     shell32

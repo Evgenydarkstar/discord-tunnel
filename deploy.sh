@@ -72,7 +72,7 @@ bootstrap_from_github() {
         if [ -f "$install_dir/.managed-install" ] && \
            [ "$(cat "$install_dir/.managed-install")" = "$install_dir" ] && \
            [ -f "$install_dir/deploy.sh" ] && [ -d "$install_dir/server" ]; then
-            exec bash "$install_dir/deploy.sh" "$@"
+            exec env DISCORD_TUNNEL_CERT_EXPORT_DIR="$SERVER_DIR" bash "$install_dir/deploy.sh" "$@"
         fi
         if [ -n "$(find "$install_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
             die "Installation directory already exists and is not managed by this script: $install_dir"
@@ -101,7 +101,7 @@ bootstrap_from_github() {
     rm -rf "$tmp"
     ok "Project downloaded to $install_dir"
     info "Re-running the deploy script from the downloaded project..."
-    exec bash "$install_dir/deploy.sh" "$@"
+    exec env DISCORD_TUNNEL_CERT_EXPORT_DIR="$SERVER_DIR" bash "$install_dir/deploy.sh" "$@"
     exit 0  # unreachable: exec replaces this process
 }
 
@@ -356,6 +356,7 @@ start_server() {
 export_ca_certificate() {
     step "Exporting the CA certificate"
     local ca_file="$SERVER_DIR/ca-cert.pem"
+    local adjacent_ca_file="${DISCORD_TUNNEL_CERT_EXPORT_DIR:-$SERVER_DIR}/ca-cert.pem"
     local ca_path=""
     for _ in $(seq 1 30); do
         ca_path="$($docker_compose -f "$SERVER_DIR/docker-compose.deploy.yml" exec -T discord-tunnel cat /data/certs/_default/ca-cert.pem 2>/dev/null || true)"
@@ -368,6 +369,11 @@ export_ca_certificate() {
         printf '%s\n' "$ca_path" > "$ca_file"
         chmod 644 "$ca_file"
         ok "CA certificate exported to $ca_file"
+        if [ "$adjacent_ca_file" != "$ca_file" ]; then
+            cp "$ca_file" "$adjacent_ca_file"
+            chmod 644 "$adjacent_ca_file"
+            ok "CA certificate copied next to deploy.sh: $adjacent_ca_file"
+        fi
     else
         warn "Could not read the CA certificate yet. It will be created on first run."
     fi
@@ -384,6 +390,10 @@ show_summary() {
     echo "  Token  : $server_token"
     if [ -f "$SERVER_DIR/ca-cert.pem" ]; then
         echo "  CA cert: $SERVER_DIR/ca-cert.pem  (install it on the client machine)"
+        if [ -n "${DISCORD_TUNNEL_CERT_EXPORT_DIR:-}" ] && \
+           [ "$DISCORD_TUNNEL_CERT_EXPORT_DIR/ca-cert.pem" != "$SERVER_DIR/ca-cert.pem" ]; then
+            echo "  CA copy: $DISCORD_TUNNEL_CERT_EXPORT_DIR/ca-cert.pem"
+        fi
     fi
     echo
     echo "Make sure UDP port $server_port is reachable:"
@@ -420,6 +430,7 @@ uninstall() {
     local compose_file="$SERVER_DIR/docker-compose.deploy.yml"
     local managed_image_id=""
     local current_image_id=""
+    local adjacent_ca_file="${DISCORD_TUNNEL_CERT_EXPORT_DIR:-$SERVER_DIR}/ca-cert.pem"
 
     if ! confirm "Remove the tunnel, its data, volumes and Docker images?" "n"; then
         info "Uninstall cancelled."
@@ -463,6 +474,9 @@ uninstall() {
     fi
 
     step "Removing deployment files"
+    if [ "$adjacent_ca_file" != "$SERVER_DIR/ca-cert.pem" ]; then
+        rm -f "$adjacent_ca_file"
+    fi
     if [ -f "$SERVER_DIR/.managed-install" ] && \
        [ "$(cat "$SERVER_DIR/.managed-install")" = "$SERVER_DIR" ] && \
        [ ! -e "$SERVER_DIR/.git" ]; then
@@ -483,7 +497,7 @@ uninstall() {
 existing_deployment_menu() {
     step "Existing installation"
     info "The Discord tunnel is already installed."
-    info "  1) Reconfigure and rebuild"
+    info "  1) Install, Reconfigure and rebuild"
     info "  2) Uninstall completely"
     info "  3) Exit"
 
