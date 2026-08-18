@@ -36,4 +36,4 @@ COPY Dockerfile.discord /app/Dockerfile.discord
 RUN chmod +x /app/scripts/*.sh && \
     mkdir -p /data /var/log
 
-ENTRYPOINT ["/app/scripts/start-worker-api.sh"]
+ENTRYPOINT ["/app/scripts/start-discord-http3.sh"]

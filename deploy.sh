@@ -311,10 +311,11 @@ write_compose() {
     step "Writing docker-compose.deploy.yml"
     cat > "$SERVER_DIR/docker-compose.deploy.yml" <<EOF
 services:
-  discord-http3-runtime:
+  discord-tunnel:
     build:
-      context: .
-      dockerfile: server/Dockerfile.discord
+      context: ./server
+      dockerfile: Dockerfile.discord
+    container_name: discord-tunnel
     restart: unless-stopped
     entrypoint: ["/app/scripts/start-discord-http3.sh"]
     ports:
@@ -341,7 +342,7 @@ export_ca_certificate() {
     local ca_file="$SERVER_DIR/ca-cert.pem"
     local ca_path=""
     for _ in $(seq 1 30); do
-        ca_path="$($docker_compose -f "$SERVER_DIR/docker-compose.deploy.yml" exec -T discord-http3-runtime cat /data/certs/_default/ca-cert.pem 2>/dev/null || true)"
+        ca_path="$($docker_compose -f "$SERVER_DIR/docker-compose.deploy.yml" exec -T discord-tunnel cat /data/certs/_default/ca-cert.pem 2>/dev/null || true)"
         if [ -n "$ca_path" ]; then
             break
         fi
@@ -374,7 +375,7 @@ show_summary() {
     echo "  - forward it if the server is behind NAT"
     echo
     info "Commands:"
-    info "  $docker_compose -f $SERVER_DIR/docker-compose.deploy.yml logs -f discord-http3-runtime"
+    info "  $docker_compose -f $SERVER_DIR/docker-compose.deploy.yml logs -f discord-tunnel"
     info "  $docker_compose -f $SERVER_DIR/docker-compose.deploy.yml down"
     echo
 }
@@ -416,7 +417,7 @@ uninstall() {
 
     # Best-effort cleanup of containers from a manual compose deployment.
     if command -v docker >/dev/null 2>&1; then
-        docker rm -f discord-http3-runtime discord-http3 >/dev/null 2>&1 || true
+        docker rm -f discord-tunnel >/dev/null 2>&1 || true
     fi
 
     step "Removing deployment files"
