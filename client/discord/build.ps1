@@ -36,7 +36,7 @@ if (-not (Test-Path -LiteralPath $RustLib -PathType Leaf)) {
     throw "Rust static library was not produced: $RustLib"
 }
 
-& cmake -S $ClientRoot -B $CMakeBuildDir -G "Visual Studio 17 2022" -A x64 "-DDISCORD_RUNTIME_LIBRARY=$RustLib"
+& cmake -S $ClientRoot -B $CMakeBuildDir -A x64 "-DDISCORD_RUNTIME_LIBRARY=$RustLib"
 & cmake --build $CMakeBuildDir --config $Config --parallel
 
 $CMakeOutputDir = Join-Path $CMakeBuildDir $Config
