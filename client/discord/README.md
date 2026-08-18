@@ -4,7 +4,7 @@ The Windows client proxies only Discord traffic and consists of two main
 artifacts:
 
 - `discord-tunnel.exe` - GUI for setup and configuration;
-- `version.dll` - loadable Discord network shim with a built-in Rust runtime.
+- `version.dll` - loadable Discord network shim with embedded Rust runtime and Winsock hooks.
 
 ## Supported paths
 
@@ -27,18 +27,16 @@ Requirements:
 - PowerShell 7.
 
 ```powershell
-cd discord
+cd client/discord
 ./build.ps1 -Config Release
 ```
 
-The resulting bundle is created in `discord/build/Release/`:
+The resulting bundle is created in `client/discord/build/Release/` and as a ZIP at
+`client/discord/build/discord-tunnel-windows-x64.zip`:
 
 - `discord-tunnel.exe`;
 - `version.dll`;
 - `discord-tunnel.ini` - template without working credentials.
-
-The source build also remains in `discord/discord-tunnel/build-output/` under the
-name `discord-tunnel.exe`.
 
 ## Install
 
@@ -47,10 +45,10 @@ name `discord-tunnel.exe`.
 3. Enter `Server`, `Port` and `Token`.
 4. Keep TLS checking enabled. If a self-signed certificate is used, install the
    server CA certificate (`ca-cert.pem`) on the machine (Certificates > Current
-   User > Trusted Root Certification Authorities) or set `ca_cert_path` in
-   `discord-tunnel.ini`.
+   User > Trusted Root Certification Authorities) or set `ca_cert` in the
+   `[tunnel]` section of `discord-tunnel.ini`.
 5. Click `Install`, then start Discord manually.
 
 `discord-tunnel.ini` with a real token must not be published or replaced with
-the build template. When manually updating an installed client, replace only
-`version.dll`.
+the build template. When manually updating an installed client, replace
+`version.dll` and keep the existing `discord-tunnel.ini`.

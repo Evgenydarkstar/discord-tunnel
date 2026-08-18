@@ -130,11 +130,9 @@ pub fn signal_fault(&self) -> SessionError {
             retry.attempt += 1;
         }
         let attempt = retry.attempt;
-        let delay = self
-            .policy
-            .base_delay
-            .mul_f32(self.policy.factor.powi(attempt as i32) as f32)
-            .min(self.policy.max_delay);
+        let scaled_secs = (self.policy.base_delay.as_secs_f64() * self.policy.factor.powi(attempt as i32))
+            .min(self.policy.max_delay.as_secs_f64());
+        let delay = Duration::from_secs_f64(scaled_secs).min(self.policy.max_delay);
         if failed {
             retry.next_attempt_at = Some(Instant::now() + delay);
         } else {

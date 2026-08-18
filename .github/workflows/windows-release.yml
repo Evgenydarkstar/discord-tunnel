@@ -1,0 +1,51 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust MSVC toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/discord/runtime -> build/cargo
+
+      - name: Run Rust tests
+        shell: pwsh
+        run: cargo test --manifest-path client/discord/runtime/Cargo.toml --locked
+
+      - name: Build Windows release bundle
+        shell: pwsh
+        run: ./client/discord/build.ps1 -Config Release
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-tunnel-windows-x64
+          path: client/discord/build/discord-tunnel-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: client/discord/build/discord-tunnel-windows-x64.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true

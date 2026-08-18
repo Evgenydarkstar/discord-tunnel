@@ -6,7 +6,9 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <cwctype>
 
+#include "discord/runtime/include/discord_runtime.h"
 #include "discord/shared/config.h"
 #include "discord/shared/fs_utils.h"
 
@@ -73,7 +75,7 @@ void load_existing_config_into_ui(const std::filesystem::path& root) {
     if (app_dirs.empty()) {
         return;
     }
-    const auto config = load_config(config_path_for_app_dir(app_dirs.front()));
+    const auto config = load_config(config_path_for_app_dir(app_dirs.back()));
     if (!config) {
         return;
     }
@@ -213,7 +215,35 @@ HWND create_edit(HWND parent, int id, int x, int y, int w, int h, DWORD extra_st
         nullptr);
 }
 
-void launch_runtime_mode(int argc, wchar_t** argv) {
+int start_embedded_runtime(const std::filesystem::path& app_dir) {
+    const auto config = load_config(config_path_for_app_dir(app_dir));
+    if (!config) {
+        return 2;
+    }
+
+    const std::string server = wide_to_utf8(config->server);
+    const std::string token = wide_to_utf8(config->token);
+    const std::string ca_cert_path = wide_to_utf8(config->ca_cert_path);
+    const char* ca_cert = ca_cert_path.empty() ? nullptr : ca_cert_path.c_str();
+    const int status = dt_embedded_start(
+        server.c_str(),
+        config->port,
+        token.c_str(),
+        ca_cert,
+        config->skip_tls_verify ? 1 : 0,
+        0);
+    return status == DT_OK ? 0 : 10 + (-status);
+}
+
+std::wstring runtime_mutex_name(const std::filesystem::path& app_dir) {
+    std::wstring name = L"Local\\DiscordTunnelRuntime-";
+    for (const wchar_t ch : app_dir.wstring()) {
+        name.push_back(std::iswalnum(static_cast<wint_t>(ch)) ? ch : L'_');
+    }
+    return name;
+}
+
+int launch_runtime_mode(int argc, wchar_t** argv) {
     DWORD parent_pid = 0;
     for (int i = 1; i < argc; ++i) {
         const std::wstring arg = argv[i];
@@ -222,17 +252,35 @@ void launch_runtime_mode(int argc, wchar_t** argv) {
         }
     }
 
+    const auto app_dir = current_module_path().parent_path();
+    HANDLE mutex = CreateMutexW(nullptr, FALSE, runtime_mutex_name(app_dir).c_str());
+    if (mutex == nullptr) {
+        return 4;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(mutex);
+        return 0;
+    }
+
+    const int runtime_status = start_embedded_runtime(app_dir);
+    if (runtime_status != 0) {
+        CloseHandle(mutex);
+        return runtime_status;
+    }
+
     if (parent_pid == 0) {
-        Sleep(5000);
-        return;
+        CloseHandle(mutex);
+        return 0;
     }
     HANDLE parent = OpenProcess(SYNCHRONIZE, FALSE, parent_pid);
     if (parent == nullptr) {
-        Sleep(5000);
-        return;
+        CloseHandle(mutex);
+        return 3;
     }
     WaitForSingleObject(parent, INFINITE);
     CloseHandle(parent);
+    CloseHandle(mutex);
+    return 0;
 }
 
 LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param) {
@@ -375,10 +423,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
         if (std::wstring(argv[i]) == L"--runtime") {
-            launch_runtime_mode(argc, argv);
+            const int exit_code = launch_runtime_mode(argc, argv);
             LocalFree(argv);
             CoUninitialize();
-            return 0;
+            return exit_code;
         }
     }
 
