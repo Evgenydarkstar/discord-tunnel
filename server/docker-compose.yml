@@ -1,0 +1,58 @@
+services:
+  vpn-control:
+    build: .
+    container_name: openconnect-control
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "8443:8443/tcp"
+      - "8080:8080/tcp"
+    env_file:
+      - .env
+    environment:
+      VPN_TYPE: "${VPN_TYPE:-discord}"
+      VPN_PORT: "${VPN_PORT:-8443}"
+      PUBLIC_IP: "${PUBLIC_IP}"
+      WORKER_ID: "${WORKER_ID:-local-worker}"
+      WORKER_TOKEN: "${WORKER_TOKEN:-change-me}"
+      WORKER_API_PORT: "8080"
+      WORKER_PUBLIC_URL: "https://127.0.0.1:8080"
+      WORKER_TLS_CERT_PATH: "/data/control-api/tls.crt"
+      WORKER_TLS_KEY_PATH: "/data/control-api/tls.key"
+      CENTRAL_API_URL: ""
+      CENTRAL_API_CA_CERT_PATH: "/data/control-api/ca.crt"
+      CENTRAL_MODE: "single"
+      APP_VERSION: "dev"
+      TZ: "Europe/Moscow"
+    volumes:
+      - ./data:/data
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv6.conf.all.disable_ipv6: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "/app/scripts/healthcheck-db.sh || curl -fsSk https://127.0.0.1:${WORKER_API_PORT:-8080}/api/v1/status || curl -fsS http://127.0.0.1:${WORKER_API_PORT:-8080}/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  discord-http3:
+    profiles: ["discord"]
+    build: .
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "app.discord_http3"]
+    ports:
+      - "${VPN_PORT:-8443}:${VPN_PORT:-8443}/udp"
+    env_file:
+      - .env
+    environment:
+      DISCORD_HTTP3_HOST: "0.0.0.0"
+      DISCORD_HTTP3_PORT: "${VPN_PORT:-8443}"
+      DISCORD_HTTP3_TOKEN: "${DISCORD_HTTP3_TOKEN:-}"
+      DISCORD_HTTP3_ALLOWED_HOSTS: "${DISCORD_HTTP3_ALLOWED_HOSTS:-discord.com,discord.gg,discord.media,discordapp.com,discordapp.net,discord-attachments-uploads-prd.storage.googleapis.com}"
+    volumes:
+      - ./data:/data

@@ -1,0 +1,7 @@
+client/discord/runtime/target/
+__pycache__/
+*.pyc
+.env
+.env.bak
+*.log
+server/data/
