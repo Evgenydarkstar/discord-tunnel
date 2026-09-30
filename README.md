@@ -1,67 +1,91 @@
 # Discord Tunnel
 
-[**Русский**](README.md) | [English](README.en.md)
+[Русский](README.ru.md) | [**English**](README.md)
 
-Discord Tunnel — самостоятельный туннель для Discord, состоящий из Linux-сервера и
-клиентского приложения для Windows. Клиент перенаправляет только сетевой трафик
-Discord; системный VPN или прокси для остальных приложений не создаётся.
+## Disclaimer
 
-[Скачать клиент для Windows](https://github.com/Evgenydarkstar/discord-tunnel/releases/latest/download/discord-tunnel-windows-x64.zip)
+The author of OpenFlux does not encourage the use of this project to bypass
+restrictions or violate the rules of any platform, and accepts no responsibility
+for how users ultimately use the utility in real life or on the Internet. Any
+specific technical characteristics of the application are no more than an
+architectural coincidence created without intent.
 
-## Возможности
+This project is entirely non-commercial and contains no paid features, hidden
+subscriptions, or commercial benefit.
 
-- сообщения, вложения и другой TCP-трафик через QUIC/HTTP/3 CONNECT;
-- голос, камера и демонстрация экрана через QUIC Datagram;
-- приоритет небольших пакетов голоса над видеопотоком под нагрузкой;
-- проверка клиента по токену;
-- ограничение доступных через сервер доменов списком Discord-хостов;
-- автоматическая установка сервера через Docker и клиента через Windows GUI.
+The author accepts no responsibility for forks, modifications, or derivative
+versions of OpenFlux created by third parties. Any changes added to a fork are
+the responsibility of that fork's author.
 
-## Как это работает
+The author is not responsible for:
+
+- any use of OpenFlux by third parties;
+- consequences caused by the use of forks or modifications;
+- damage resulting from derivative versions;
+- violations committed using forks.
+
+The original code is provided "as is," without warranties of any kind.
+
+Discord Tunnel is a self-hosted tunnel for Discord consisting of a Linux server
+and a Windows client application. The client redirects Discord network traffic
+only; it does not create a system-wide VPN or proxy for other applications.
+
+[Download the Windows client](https://github.com/Evgenydarkstar/discord-tunnel/releases/latest/download/discord-tunnel-windows-x64.zip)
+
+## Features
+
+- messages, attachments, and other TCP traffic over QUIC/HTTP/3 CONNECT;
+- voice, camera, and screen sharing over QUIC Datagram;
+- prioritization of small voice packets over video traffic under load;
+- token-based client authentication;
+- a server allowlist restricting accessible destinations to Discord hosts;
+- automated Docker server deployment and a Windows GUI installer.
+
+## How it works
 
 ```text
-Discord для Windows
-        │
-        │ version.dll перехватывает только соединения Discord
-        ▼
-Встроенный клиент (Rust) ═══ QUIC/HTTP/3, UDP ═══► Discord Tunnel Server
-                                                       │
-                                                       ▼
-                                                сервисы Discord
+Discord for Windows
+        |
+        | version.dll intercepts Discord connections only
+        v
+Embedded client (Rust) === QUIC/HTTP/3, UDP ===> Discord Tunnel Server
+                                                       |
+                                                       v
+                                                Discord services
 ```
 
-Windows-клиент устанавливает сетевой модуль в каталог Discord. Сервер принимает
-зашифрованное QUIC-соединение, проверяет токен и разрешает обращения только к
-настроенным доменам. Один сервер можно использовать с несколькими клиентскими
-компьютерами, если им выдан один и тот же токен.
+The Windows client installs a network module into the Discord directory. The
+server accepts an encrypted QUIC connection, validates its token, and permits
+access only to configured destinations. Multiple client computers can use one
+server when configured with the same token.
 
-## Установка сервера
+## Server installation
 
-### Требования
+### Requirements
 
-- Linux-сервер с публичным IP-адресом;
-- открытый входящий UDP-порт, по умолчанию `443`;
-- права `root` или доступ к `sudo`;
-- `curl` или `wget`.
+- a Linux server with a public IP address;
+- an open inbound UDP port, `443` by default;
+- `root` privileges or `sudo` access;
+- `curl` or `wget`.
 
-### Сетевые порты
+### Network ports
 
-Для соединения клиента с сервером нужен только один входящий порт:
+Only one inbound port is required between the client and the server:
 
-| Направление | Протокол | Порт | Назначение |
+| Direction | Protocol | Port | Purpose |
 | --- | --- | --- | --- |
-| Входящий | UDP | `443` или выбранный при установке | QUIC/HTTP/3 между клиентом и сервером |
-| Входящий | TCP | не требуется | Туннель не принимает TCP-соединения от клиента |
+| Inbound | UDP | `443` or the port selected during setup | QUIC/HTTP/3 between client and server |
+| Inbound | TCP | not required | The tunnel does not accept TCP connections from clients |
 
-QUIC и HTTP/3 работают поверх UDP, поэтому открывать или пробрасывать входящий
-`TCP 443` не нужно. Серверу при этом необходим исходящий доступ к сервисам
-Discord: TCP для HTTPS-соединений и UDP для голоса, камеры и демонстрации экрана.
-Если исходящий трафик ограничен firewall, разрешите TCP и UDP к доменам и портам
-Discord из настроенного списка разрешённых хостов.
+QUIC and HTTP/3 run over UDP, so you do not need to expose or forward inbound
+`TCP 443`. The server still needs outbound access to Discord services: TCP for
+HTTPS connections and UDP for voice, camera, and screen sharing. If outbound
+traffic is restricted by a firewall, allow TCP and UDP to the Discord hosts and
+ports covered by the configured destination allowlist.
 
-### Быстрая установка
+### Quick installation
 
-Скачайте и запустите интерактивный установщик:
+Download and run the interactive installer:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Evgenydarkstar/discord-tunnel/main/deploy.sh
@@ -69,41 +93,42 @@ chmod +x deploy.sh
 sudo ./deploy.sh
 ```
 
-Установщик:
+The installer will:
 
-1. при необходимости установит Docker и Docker Compose;
-2. запросит UDP-порт и публичный IP-адрес сервера;
-3. сгенерирует токен доступа;
-4. предложит безопасный список разрешённых Discord-доменов;
-5. соберёт и запустит контейнер;
-6. сохранит клиентский CA-сертификат в двух местах:
-   `<каталог-со-скачанным-deploy.sh>/.discord-tunnel/ca-cert.pem` и рядом с
-   исходным `deploy.sh` как `<каталог-со-скачанным-deploy.sh>/ca-cert.pem`.
+1. install Docker and Docker Compose when needed;
+2. ask for the UDP port and the server's public IP address;
+3. generate an access token;
+4. offer a safe allowlist of Discord domains;
+5. build and start the container;
+6. export the client CA certificate to two locations:
+   `<directory-containing-downloaded-deploy.sh>/.discord-tunnel/ca-cert.pem` and
+   `<directory-containing-downloaded-deploy.sh>/ca-cert.pem` next to the original
+   `deploy.sh`.
 
-При запуске отдельного скачанного скрипта файлы сервиса сохраняются в каталоге
-`.discord-tunnel` рядом с `deploy.sh`. Повторный запуск `deploy.sh` обнаруживает
-установленный сервис и предлагает перенастроить его, полностью удалить или выйти.
+When running the separately downloaded script, service files are stored in a
+`.discord-tunnel` directory next to `deploy.sh`. Running `deploy.sh` again
+detects the installed service and offers to reconfigure it, remove it
+completely, or exit.
 
-После установки сохраните значения `Server`, `Port`, `Token`. Если команды выше
-запускались из домашнего каталога, одинаковые копии сертификата находятся по
-точным путям `$HOME/.discord-tunnel/ca-cert.pem` и `$HOME/ca-cert.pem` (рядом со
-скачанным `deploy.sh`). Чтобы вывести оба абсолютных пути, выполните:
+After installation, save the `Server`, `Port`, and `Token` values. If you ran the
+commands above from your home directory, identical certificate copies are stored
+at the exact paths `$HOME/.discord-tunnel/ca-cert.pem` and `$HOME/ca-cert.pem`
+(next to the downloaded `deploy.sh`). To print both absolute paths, run:
 
 ```bash
 realpath .discord-tunnel/ca-cert.pem
 realpath ca-cert.pem
 ```
 
-Передайте этот файл на клиентский компьютер по безопасному каналу. Нужен только
-публичный `ca-cert.pem`; закрытый ключ `ca-key.pem` копировать с сервера нельзя.
-Токен даёт доступ к туннелю, поэтому не публикуйте его в репозитории, сообщениях
-или скриншотах.
+Transfer this file to the client computer over a secure channel. Only the public
+`ca-cert.pem` is needed; never copy the private `ca-key.pem` from the server. The
+token grants access to the tunnel, so do not publish it in a repository, message,
+or screenshot.
 
-Если сервер находится за NAT, настройте проброс выбранного UDP-порта. Этот же
-порт необходимо разрешить в firewall сервера и в security group облачного
-провайдера.
+If the server is behind NAT, forward the selected UDP port. Allow the same port
+through the server firewall and the cloud provider's security group.
 
-### Установка из клона репозитория
+### Installation from a repository clone
 
 ```bash
 git clone https://github.com/Evgenydarkstar/discord-tunnel.git
@@ -111,14 +136,14 @@ cd discord-tunnel
 sudo ./deploy.sh
 ```
 
-При таком способе `deploy.sh` уже находится в каталоге установки, поэтому обе
-копии совпадают: сертификат лежит рядом с ним в корне клона. Если `git clone`
-запускался из домашнего каталога, точный путь —
-`$HOME/discord-tunnel/ca-cert.pem`. Из корня клона абсолютный путь можно получить
-командой `realpath ca-cert.pem`.
+With this method, `deploy.sh` is already in the installation directory, so the
+two copies resolve to the same file next to it in the repository root. If you ran
+`git clone` from your home directory, the exact path is
+`$HOME/discord-tunnel/ca-cert.pem`. From the repository root, run
+`realpath ca-cert.pem` to print its absolute path.
 
-Полезные команды установщик выводит в конце работы. Для стандартной установки
-они выглядят так:
+The installer prints the relevant management commands when it finishes. For a
+standard installation, they are:
 
 ```bash
 docker compose -f docker-compose.deploy.yml logs -f discord-tunnel
@@ -126,78 +151,77 @@ docker compose -f docker-compose.deploy.yml restart discord-tunnel
 sudo ./deploy.sh uninstall
 ```
 
-Удаление останавливает контейнер и удаляет данные сервиса, Docker volumes,
-собранные Docker-образы и каталог управляемой установки.
+Uninstalling stops the container and removes service data, Docker volumes,
+built Docker images, and the managed installation directory.
 
-## Установка клиента Windows
+## Windows client installation
 
-### Требования
+### Requirements
 
-- Windows 10 или Windows 11 x64;
-- установленный официальный Discord Desktop;
-- параметры и `ca-cert.pem`, полученные при установке сервера.
+- Windows 10 or Windows 11 x64;
+- the official Discord Desktop application;
+- the connection settings and `ca-cert.pem` produced during server setup.
 
-### Порядок установки
+### Installation steps
 
-1. Скачайте [последний Windows-релиз](https://github.com/Evgenydarkstar/discord-tunnel/releases/latest/download/discord-tunnel-windows-x64.zip).
-2. Распакуйте ZIP полностью в отдельную папку. `discord-tunnel.exe` и
-   `version.dll` должны находиться рядом.
-3. Полностью закройте Discord, включая значок в области уведомлений.
-4. Запустите `discord-tunnel.exe`.
-5. В поле `Server` укажите IP-адрес или доменное имя сервера без `https://`.
-6. Введите `Port` и `Token`, показанные серверным установщиком.
-7. Скопируйте с сервера обязательный CA-сертификат: `$HOME/ca-cert.pem` или
-   `$HOME/.discord-tunnel/ca-cert.pem` при быстрой установке либо
-   `$HOME/discord-tunnel/ca-cert.pem`, если клон создавался из домашнего каталога.
-   Затем нажмите `Browse` рядом с `CA certificate` и выберите этот файл.
-8. Проверьте путь к Discord. Обычно он определяется автоматически как
+1. Download the [latest Windows release](https://github.com/Evgenydarkstar/discord-tunnel/releases/latest/download/discord-tunnel-windows-x64.zip).
+2. Extract the entire ZIP into a separate folder. `discord-tunnel.exe` and
+   `version.dll` must remain next to each other.
+3. Fully close Discord, including its system tray icon.
+4. Run `discord-tunnel.exe`.
+5. Enter the server IP address or hostname in `Server`, without `https://`.
+6. Enter the `Port` and `Token` shown by the server installer.
+7. Copy the required CA certificate from the server: `$HOME/ca-cert.pem` or
+   `$HOME/.discord-tunnel/ca-cert.pem` for quick installation, or
+   `$HOME/discord-tunnel/ca-cert.pem` if the clone was created from the home
+   directory. Then click `Browse` next to `CA certificate` and select that file.
+8. Check the Discord path. It is normally detected automatically as
    `%LOCALAPPDATA%\Discord`.
-9. Оставьте `Skip TLS verify` выключенным и нажмите `Install`.
-10. После сообщения об успешной установке запустите Discord обычным способом.
+9. Leave `Skip TLS verify` disabled and click `Install`.
+10. Start Discord normally after the installation succeeds.
 
-Сборка пока не подписана коммерческим Windows-сертификатом, поэтому SmartScreen
-может показать предупреждение. Загружайте архив только со страницы
-[Releases](https://github.com/Evgenydarkstar/discord-tunnel/releases).
+The build is not currently signed with a commercial Windows certificate, so
+SmartScreen may display a warning. Download the archive only from the project's
+[Releases](https://github.com/Evgenydarkstar/discord-tunnel/releases) page.
 
-### Обновление и удаление клиента
+### Updating and removing the client
 
-Для обновления полностью закройте Discord, распакуйте новый релиз и снова
-нажмите `Install`. Чтобы удалить клиентский модуль, закройте Discord, запустите
-`discord-tunnel.exe`, проверьте путь к Discord и нажмите `Uninstall`.
+To update, fully close Discord, extract the new release, and click `Install`
+again. To remove the client module, close Discord, run `discord-tunnel.exe`,
+check the Discord path, and click `Uninstall`.
 
-Обновление Discord может создать новый каталог `app-*`. Если после обновления
-туннель перестал работать, повторно запустите установщик клиента и нажмите
-`Install`.
+A Discord update may create a new `app-*` directory. If the tunnel stops working
+after an update, run the client installer again and click `Install`.
 
-## Сборка клиента из исходников
+## Building the client from source
 
-Для сборки нужны Windows x64, Rust stable, Visual Studio Build Tools с C++,
-CMake 3.20+ и PowerShell 7:
+The build requires Windows x64, Rust stable, Visual Studio Build Tools with C++,
+CMake 3.20+, and PowerShell 7:
 
 ```powershell
 cd client/discord
 ./build.ps1 -Config Release
 ```
 
-Готовый архив появится в
-`client/discord/build/discord-tunnel-windows-x64.zip`. Подробности находятся в
-[`client/discord/README.md`](client/discord/README.md).
+The resulting archive is written to
+`client/discord/build/discord-tunnel-windows-x64.zip`. See
+[`client/discord/README.md`](client/discord/README.md) for additional details.
 
-## Структура проекта
+## Project structure
 
-- `server/` — Python-сервер QUIC/HTTP/3 и Docker-конфигурация;
-- `client/discord/` — Windows GUI, нативный сетевой модуль и Rust runtime;
-- `deploy.sh` — интерактивная установка и удаление сервера;
-- `.github/workflows/windows-release.yml` — сборка Windows-архива и публикация
-  GitHub Release по тегам `v*`.
+- `server/` - Python QUIC/HTTP/3 server and Docker configuration;
+- `client/discord/` - Windows GUI, native network module, and Rust runtime;
+- `deploy.sh` - interactive server installation and removal;
+- `.github/workflows/windows-release.yml` - Windows archive build and GitHub
+  Release publication for `v*` tags.
 
-## Безопасность
+## Security
 
-- не отключайте проверку TLS без необходимости;
-- не публикуйте `Token`, `.env` и установленный `discord-tunnel.ini`;
-- оставляйте список разрешённых хостов ограниченным доменами Discord;
-- регулярно обновляйте сервер и клиент из доверенного репозитория.
+- do not disable TLS verification unless necessary;
+- do not publish the `Token`, `.env`, or an installed `discord-tunnel.ini`;
+- keep the destination allowlist restricted to Discord domains;
+- regularly update the server and client from the trusted repository.
 
-Проект предназначен для использования на собственных устройствах и серверах.
-Пользователь самостоятельно отвечает за соблюдение законодательства и правил
-используемых сервисов.
+This project is intended for use on your own devices and servers. You are
+responsible for complying with applicable laws and the terms of the services
+you use.
