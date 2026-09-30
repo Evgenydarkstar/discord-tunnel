@@ -4,22 +4,22 @@
 
 ## Disclaimer
 
-The author of OpenFlux does not encourage the use of this project to bypass
-restrictions or violate the rules of any platform, and accepts no responsibility
-for how users ultimately use the utility in real life or on the Internet. Any
-specific technical characteristics of the application are no more than an
-architectural coincidence created without intent.
+The author of Discord Tunnel does not encourage the use of this project to
+bypass restrictions or violate the rules of any platform, and accepts no
+responsibility for how users ultimately use the utility in real life or on the
+Internet. Any specific technical characteristics of the application are no
+more than an architectural coincidence created without intent.
 
 This project is entirely non-commercial and contains no paid features, hidden
 subscriptions, or commercial benefit.
 
 The author accepts no responsibility for forks, modifications, or derivative
-versions of OpenFlux created by third parties. Any changes added to a fork are
-the responsibility of that fork's author.
+versions of Discord Tunnel created by third parties. Any changes added to a
+fork are the responsibility of that fork's author.
 
 The author is not responsible for:
 
-- any use of OpenFlux by third parties;
+- any use of Discord Tunnel by third parties;
 - consequences caused by the use of forks or modifications;
 - damage resulting from derivative versions;
 - violations committed using forks.
